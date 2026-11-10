@@ -1,0 +1,13 @@
+Repository name: combat-gremlin
+
+Short GitHub description (About):
+Roll20 Pro combat automation for D&D 5e (2014/2024): attacks, multi-target spell saves, resistances, HP tracking and DM Undo.
+
+Suggested topics:
+roll20, roll20-api, roll20-mod, dnd, dnd5e, dnd2024, combat-automation, javascript
+
+Suggested v1.0.0 release title:
+Combat Gremlin v1.0.0 — Initial Release
+
+Suggested release summary:
+First public release. Automate single-target AC attacks and 1–10-target spell saves in Roll20, including typed damage defenses, per-type rounding, automatic HP updates and DM Undo. Requires Roll20 Pro, GroupCheck and GroupInitiative. Tested with D&D 5e 2014/2024 character sheets. See the README for install steps and limitations.
