@@ -10,4 +10,4 @@ Suggested v1.0.0 release title:
 Combat Gremlin v1.0.0 — Initial Release
 
 Suggested release summary:
-First public release. Automate single-target AC attacks and 1–10-target spell saves in Roll20, including typed damage defenses, per-type rounding, automatic HP updates and DM Undo. Requires Roll20 Pro, GroupCheck and GroupInitiative. Tested with D&D 5e 2014/2024 character sheets. See the README for install steps and limitations.
+First public release. Automate single-target AC attacks and 1–10-target spell saves in Roll20, including typed damage defenses, per-type rounding, automatic HP updates and DM Undo. Includes clean no-space emoji Collection macros, status markers, and D&D 2024 condition quick-reference. Requires Roll20 Pro, GroupCheck and GroupInitiative. Tested with D&D 5e 2014/2024 character sheets. See the README for install steps and limitations.

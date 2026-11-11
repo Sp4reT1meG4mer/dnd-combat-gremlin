@@ -2134,17 +2134,43 @@ var CombatGremlinStatus = CombatGremlinStatus || (function () {
 (function () {
     'use strict';
     var VERSION = '1.0.0';
-    var CORE_MACROS = [["CG-Init", "!group-init", ""], ["CG-Clear", "!group-init --clear", ""], ["CG-Saves", "!group-check {{\n--?{Ability Save|Strength,Strength Save|Dexterity,Dexterity Save|Constitution,Constitution Save|Intelligence,Intelligence Save|Wisdom,Wisdom Save|Charisma,Charisma Save}\n--process\n--subheader vs DC ?{DC}\n--button SaveDamage !cg-save-damage\n~dmg [[?{Damage}]]\n~type ?{Damage on Save|Half,half|None,none}\n~DC ?{DC}\n~saves RESULTS(,)\n~ids IDS(,)\n}}", ""], ["CG-Target", "!cg-target @{target|token_id}", "all"], ["CG-MultiSave", "!cg-multi-menu", "all"], ["CG-EndTurn", "!cg-endturn", "all"]];
-    // Collection macro names must be safe for the Roll20 quickbar's #name call.
-    // Keep display emojis as player-local quickbar nicknames instead.
-    var LEGACY_PLAYER_MACROS = {
-        'CG-Target': '🎯 TARGET MONSTER 🎯',
-        'CG-EndTurn': '⏭ END TURN'
+    // These are the actual Collection macro names, not per-user Quickbar nicknames.
+    // No spaces: Roll20 invokes Collection macros by a #name reference.
+    var MACRO_NAMES = {
+        init: '🎲INITIATIVE🎲',
+        clear: '🧹CLEAR-INIT🧹',
+        target: '🎯TARGET-MONSTER🎯',
+        multi: '🔥SPELL-MULTI-SAVE🔥',
+        end: '⏭END-TURN⏭',
+        status: '⚙️SET-STATUS⚙️',
+        rules: '📖CONDITIONS📖'
     };
-    // Deliberately do NOT resolve the CG-Status macro here: this code executes
-    // before on('ready') and Campaign() may still return undefined.
-    var EXTRA_MACROS = [["CG-Status", "!cg-status menu", ""], ["CG-Rules", "!cg-rules ?{Condition|Blinded,Blinded|Charmed,Charmed|Deafened,Deafened|Frightened,Frightened|Grappled,Grappled|Incapacitated,Incapacitated|Invisible,Invisible|Paralyzed,Paralyzed|Petrified,Petrified|Poisoned,Poisoned|Prone,Prone|Restrained,Restrained|Stunned,Stunned|Unconscious,Unconscious}", ""]];
-    var RULES_2014 = {"Blinded": ["A blinded creature can’t see and automatically fails any ability check that requires sight.", "Attack rolls against the creature have advantage and the creature’s attack rolls have disadvantage."], "Charmed": ["A charmed creature can’t attack the charmer or target the charmer with harmful abilities or magical effects.", "The charmer has advantage on any ability check to interact socially with the creature."], "Deafened": ["A deafened creature can’t hear and automatically fails any ability check that requires hearing."], "Frightened": ["A frightened creature has disadvantage on ability checks and attack rolls while the source of its fear is within line of sight.", "The creature can’t willingly move closer to the source of its fear."], "Grappled": ["A grappled creature’s speed becomes 0 and it can’t benefit from any bonus to its speed.", "The condition ends if the grappler is incapacitated (see the condition).", "The condition also ends if an effect removes the grappled creature from the reach of the grappler or grappling effect."], "Incapacitated": ["An incapacitated creature can’t take actions or reactions."], "Invisible": ["An invisible creature is impossible to see without the aid of magic or a special sense. For the purpose of hiding the creature is heavily obscured. The creature’s location can be detected by any noise it makes or any tracks it leaves.", "Attack rolls against the creature have disadvantage and the creature’s attack rolls have advantage."], "Paralyzed": ["A paralyzed creature is incapacitated (can’t take actions or reactions) and can’t move or speak.", "The creature automatically fails Strength and Dexterity saving throws.", "Attack rolls against the creature have advantage.", "Any attack that hits the creature is a critical hit if the attacker is within 5 feet of the creature."], "Petrified": ["A petrified creature is transformed - along with any nonmagical object it is wearing or carrying - into a solid inanimate substance (usually stone). Its weight increases by a factor of ten and it ceases aging.", "The creature is incapacitated (see the condition) can’t move or speak - and is unaware of its surroundings.", "Attack rolls against the creature have advantage.", "The creature automatically fails Strength and Dexterity saving throws.", "The creature has resistance to all damage.", "The creature is immune to poison and disease - although a poison or disease already in its system is suspended—not neutralized."], "Poisoned": ["A poisoned creature has disadvantage on attack rolls and ability checks."], "Prone": ["A prone creature’s only movement option is to crawl (see Movement) unless it stands up and thereby ends the condition.", "The creature has disadvantage on attack rolls.", "An attack roll against the creature has advantage if the attacker is within 5 feet of the creature. Otherwise the attack roll has disadvantage.", "Standing from prone costs half movement."], "Restrained": ["A restrained creature’s speed becomes 0 and it can’t benefit from any bonus to its speed.", "Attack rolls against the creature have advantage and the creature’s attack rolls have disadvantage.", "The creature has disadvantage on Dexterity saving throws."], "Stunned": ["A stunned creature is incapacitated (see the condition) can’t move - and can speak only falteringly.", "The creature automatically fails Strength and Dexterity saving throws.", "Attack rolls against the creature have advantage."], "Unconscious": ["An unconscious creature is incapacitated (can’t take actions or reactions) can’t move or speak - and is unaware of its surroundings.", "The creature drops whatever it’s holding and falls prone.", "The creature automatically fails Strength and Dexterity saving throws.", "Attack rolls against the creature have advantage.", "Any attack that hits the creature is a critical hit if the attacker is within 5 feet of the creature."]};
+    var CORE_MACROS = [
+        [MACRO_NAMES.init, '!group-init', ''],
+        [MACRO_NAMES.clear, '!group-init --clear', ''],
+        // CG-Saves remains unchanged: this optional manual GroupCheck helper was
+        // not among the seven macros approved for renaming.
+        ['CG-Saves', '!group-check {{\n--?{Ability Save|Strength,Strength Save|Dexterity,Dexterity Save|Constitution,Constitution Save|Intelligence,Intelligence Save|Wisdom,Wisdom Save|Charisma,Charisma Save}\n--process\n--subheader vs DC ?{DC}\n--button SaveDamage !cg-save-damage\n~dmg [[?{Damage}]]\n~type ?{Damage on Save|Half,half|None,none}\n~DC ?{DC}\n~saves RESULTS(,)\n~ids IDS(,)\n}}', ''],
+        [MACRO_NAMES.target, '!cg-target @{target|token_id}', 'all'],
+        [MACRO_NAMES.multi, '!cg-multi-menu', 'all'],
+        [MACRO_NAMES.end, '!cg-endturn', 'all']
+    ];
+    var EXTRA_MACROS = [
+        [MACRO_NAMES.status, '!cg-status menu', ''],
+        [MACRO_NAMES.rules, '!cg-rules ?{Condition|Blinded,Blinded|Charmed,Charmed|Deafened,Deafened|Exhaustion,Exhaustion|Frightened,Frightened|Grappled,Grappled|Incapacitated,Incapacitated|Invisible,Invisible|Paralyzed,Paralyzed|Petrified,Petrified|Poisoned,Poisoned|Prone,Prone|Restrained,Restrained|Stunned,Stunned|Unconscious,Unconscious}', '']
+    ];
+    // Migrate the exact old script-managed names in place, preserving the macro ID
+    // and its Quickbar association where Roll20 allows this.
+    var LEGACY_NAMES = {};
+    LEGACY_NAMES[MACRO_NAMES.init] = ['CG-Init'];
+    LEGACY_NAMES[MACRO_NAMES.clear] = ['CG-Clear'];
+    LEGACY_NAMES[MACRO_NAMES.target] = ['CG-Target', '🎯 TARGET MONSTER 🎯'];
+    LEGACY_NAMES[MACRO_NAMES.multi] = ['CG-MultiSave', '🔥 MULTI-TARGET SAVE🔥', '🔥 MULTI-TARGET SAVE'];
+    LEGACY_NAMES[MACRO_NAMES.end] = ['CG-EndTurn', '⏭ END TURN'];
+    LEGACY_NAMES[MACRO_NAMES.status] = ['CG-Status'];
+    LEGACY_NAMES[MACRO_NAMES.rules] = ['CG-Rules'];
+    // Optional 2024 quick reference. Original summaries based on CC BY 4.0 SRD 5.2.1.
+    var RULES_2024 = {"Blinded":["You cannot see and automatically fail ability checks that require sight.","Attacks against you have Advantage; your attacks have Disadvantage."],"Charmed":["You cannot attack the charmer or target them with damaging abilities or magical effects.","The charmer has Advantage on ability checks for social interaction with you."],"Deafened":["You cannot hear and automatically fail ability checks that require hearing."],"Exhaustion":["Each instance adds one Exhaustion level (maximum 6); reaching level 6 kills you.","Your D20 Tests take a penalty of 2 per Exhaustion level.","Your Speed is reduced by 5 feet per Exhaustion level.","Finishing a Long Rest removes one level; the condition ends at level 0."],"Frightened":["You have Disadvantage on ability checks and attack rolls while the source of fear is in line of sight.","You cannot willingly move closer to the source of fear."],"Grappled":["Your Speed is 0 and cannot increase.","Your attack rolls have Disadvantage against creatures other than the grappler.","The grappler can move you, usually spending one extra foot of movement per foot moved (size exceptions apply).","You can use an action to try to escape with Athletics or Acrobatics against the grapple escape DC. The grapple also ends if the grappler is Incapacitated or you leave its reach."],"Incapacitated":["You cannot take actions, Bonus Actions, or Reactions.","Concentration ends, and you cannot speak.","You have Disadvantage on Initiative if Incapacitated when you roll it."],"Invisible":["You have Advantage on Initiative rolls while Invisible.","Effects requiring the target to be seen cannot target you unless their creator can somehow see you; worn and carried gear is concealed too.","Your attacks have Advantage, and attacks against you have Disadvantage, unless the other creature can somehow see you."],"Paralyzed":["You are Incapacitated, and your Speed is 0 and cannot increase.","You automatically fail Strength and Dexterity saving throws.","Attacks against you have Advantage. Any attack that hits you is a Critical Hit if its attacker is within 5 feet."],"Petrified":["You and nonmagical equipment become solid inanimate substance; your weight increases tenfold and you stop aging.","You are Incapacitated; your Speed is 0 and cannot increase.","Attacks against you have Advantage; you automatically fail Strength and Dexterity saving throws.","You have Resistance to all damage and Immunity to the Poisoned condition."],"Poisoned":["You have Disadvantage on attack rolls and ability checks."],"Prone":["You can crawl, or spend movement equal to half your Speed (rounded down) to stand. You cannot stand while your Speed is 0.","Your attacks have Disadvantage. Attacks against you have Advantage from within 5 feet and Disadvantage from farther away."],"Restrained":["Your Speed is 0 and cannot increase.","Attacks against you have Advantage, and your attacks have Disadvantage.","You have Disadvantage on Dexterity saving throws."],"Stunned":["You are Incapacitated.","You automatically fail Strength and Dexterity saving throws.","Attacks against you have Advantage."],"Unconscious":["You are Incapacitated and Prone, drop held items, and are unaware of your surroundings.","Your Speed is 0 and cannot increase. You remain Prone after Unconscious ends.","Attacks against you have Advantage; you automatically fail Strength and Dexterity saving throws.","Any attack that hits you is a Critical Hit if its attacker is within 5 feet."]};
 
     // Macro owners must be real players. An API-generated macro cannot set a user's
     // personal "In Bar" checkbox; this is a Roll20 client-side preference.
@@ -2158,32 +2184,44 @@ var CombatGremlinStatus = CombatGremlinStatus || (function () {
         return current === '!cg-multi-menu' ||
             current === '!cg-multi-open ?{How many targets?|1|2|3|4|5|6|7|8|9|10} ?{On successful save|Auto,auto|Half damage,half|No damage,none|Save only,saveonly}';
     }
+    function isManagedAction(name, action, expected) {
+        var actual = String(action || '').trim();
+        if (name === MACRO_NAMES.multi) return isStockMultiAction(actual);
+        // Status action is assembled from campaign-specific marker IDs; its
+        // exact text can legitimately differ from the current sync result.
+        if (name === MACRO_NAMES.status) return /^!cg-status(?:\s|$)/i.test(actual);
+        // Upgrading from the older 2014 CG-Rules dropdown should update the
+        // list of conditions to SRD 5.2.1 without losing the macro ID.
+        if (name === MACRO_NAMES.rules) return /^!cg-rules\s+\?\{Condition\|/.test(actual);
+        return actual === String(expected || '').trim();
+    }
     function installFor(playerId, includeExtras, force) {
         var defs = CORE_MACROS.concat(includeExtras ? EXTRA_MACROS : []);
         var added = 0, updated = 0, kept = 0, renamed = 0;
         defs.forEach(function (d) {
-            var name = d[0], action = name === 'CG-Status' ? CombatGremlinStatus.macroAction() : d[1], visibleto = d[2];
+            var name = d[0], action = name === MACRO_NAMES.status ? CombatGremlinStatus.macroAction() : d[1], visibleto = d[2];
             var same = (findObjs({ _type:'macro', _playerid:playerId, name:name }) || []);
-            if (!same.length && name === 'CG-MultiSave') {
-                // Roll20 cannot invoke collection macros containing spaces reliably.
-                // Migrate the old decorative macro name in place to preserve its ID
-                // and the user's existing quickbar association. The visual quickbar
-                // nickname is a client preference and must be set by the player.
-                var prior = (findObjs({ _type:'macro', _playerid:playerId, name:'🔥 MULTI-TARGET SAVE🔥' }) || [])
-                    .concat(findObjs({ _type:'macro', _playerid:playerId, name:'🔥 MULTI-TARGET SAVE' }) || []);
-                if (prior.length === 1 && isStockMultiAction(prior[0].get('action'))) {
-                    prior[0].set({name:name, action:action, visibleto:visibleto});
-                    same = prior;
+            var migrated = false;
+            if (!same.length && LEGACY_NAMES[name]) {
+                var legacy = [];
+                LEGACY_NAMES[name].forEach(function(alias) {
+                    (findObjs({ _type:'macro', _playerid:playerId, name:alias }) || []).forEach(function(m) {
+                        if (isManagedAction(name, m.get('action'), d[1])) legacy.push(m);
+                    });
+                });
+                // Do not guess which macro to rename if multiple aliases exist.
+                // Also do not touch a custom macro with a modified action.
+                if (legacy.length === 1) {
+                    legacy[0].set({name:name, action:action, visibleto:visibleto});
+                    same = legacy;
+                    migrated = true;
                     renamed += 1;
-                }
-            }
-            if (!same.length && LEGACY_PLAYER_MACROS[name]) {
-                var legacy = (findObjs({ _type:'macro', _playerid:playerId, name:LEGACY_PLAYER_MACROS[name] }) || []);
-                // Only migrate a stock macro, without overwriting a custom one.
-                if (legacy.length === 1 && String(legacy[0].get('action') || '').trim() === action.trim()) {
-                    legacy[0].set({ name: name, visibleto: visibleto });
-                    same = legacy; // preserves the macro ID and quickbar association
-                    renamed += 1;
+                } else if (legacy.length > 1) {
+                    // Keep both old macros and avoid creating a third copy;
+                    // the GM can remove the duplicate manually, preserving IDs.
+                    kept += 1;
+                    log('Combat Gremlin: multiple legacy copies of '+name+' for '+playerId+'. Rename one manually before sync; nothing changed.');
+                    return;
                 }
             }
             if (!same.length) {
@@ -2195,9 +2233,9 @@ var CombatGremlinStatus = CombatGremlinStatus || (function () {
                     istokenaction: false
                 });
                 added += 1;
-            // CG-Status is generated by Combat Gremlin, so refresh its marker IDs
-            // on sandbox restart. Don't touch other existing macros unless --sync.
-            } else if (force || (name === 'CG-MultiSave' && isStockMultiAction(same[0].get('action')) && String(same[0].get('action') || '').trim() !== action) || (name === 'CG-Saves' && String(same[0].get('action') || '') === action.replace('--button SaveDamage !cg-save-damage', '--button ApplyDamage !apply-damage')) || (name === 'CG-Status' && /^!cg-status(?:\s|$)/.test(String(same[0].get('action') || '')) && same[0].get('action') !== action)) {
+            } else if (migrated) {
+                // The rename above already refreshed the stock action.
+            } else if (force || (name === MACRO_NAMES.multi && isStockMultiAction(same[0].get('action')) && String(same[0].get('action') || '').trim() !== action) || (name === 'CG-Saves' && String(same[0].get('action') || '') === action.replace('--button SaveDamage !cg-save-damage', '--button ApplyDamage !apply-damage')) || (name === MACRO_NAMES.status && /^!cg-status(?:\s|$)/.test(String(same[0].get('action') || '')) && same[0].get('action') !== action)) {
                 same[0].set({ action:action, visibleto:visibleto });
                 updated += 1;
             } else {
@@ -2224,10 +2262,10 @@ var CombatGremlinStatus = CombatGremlinStatus || (function () {
         }
         if (/^!cg-help$/i.test(input)) {
             whisper('Combat Gremlin '+VERSION+' | '+
-                    '<b>CG-Init</b>: !group-init | <b>CG-Clear</b>: !group-init --clear | '+
-                    '<b>CG-Saves</b>: GM manual GroupCheck | <b>🎯 TARGET MONSTER 🎯</b>: Select a target. '+
-                    '<b>🔥 MULTI-TARGET SAVE🔥</b>: Choose 1-10 targets for a spell save, then cast from the sheet. '+
-                    '<b>⏭ END TURN</b>: End only the current controlled turn (GM override). '+
+                    '<b>'+MACRO_NAMES.init+'</b>: !group-init | <b>'+MACRO_NAMES.clear+'</b>: !group-init --clear | '+
+                    '<b>CG-Saves</b>: GM manual GroupCheck | <b>'+MACRO_NAMES.target+'</b>: Select a target. '+
+                    '<b>'+MACRO_NAMES.multi+'</b>: Choose 1-10 targets for a spell save, then cast from the sheet. '+
+                    '<b>'+MACRO_NAMES.end+'</b>: End only the current controlled turn (GM override). '+
                     'Refresh macros/markers: !cg-extras --sync. '+
                     'Targets persist until changed or turn end; !cg-cancel clears yours. '+
                     'Opportunity attacks/reactions outside your turn are allowed. '+
@@ -2236,11 +2274,11 @@ var CombatGremlinStatus = CombatGremlinStatus || (function () {
         }
         if (/^!cg-rules(?:\s+(.+))?$/i.test(input)) {
             var requested = input.replace(/^!cg-rules\s*/i,'').trim();
-            var data = RULES_2014[requested];
-            if (!data) { whisper('Unknown condition. Use the CG-Rules button.'); return; }
+            var data = RULES_2024[requested];
+            if (!data) { whisper('Unknown condition. Use the '+MACRO_NAMES.rules+' button.'); return; }
             sendChat('Combat Gremlin', '<div style="border:1px solid #999;background:#fff;padding:6px">'+
-                '<b>Condition: '+html(requested)+'</b> (legacy 2014 rules reference)<ul><li>'+
-                data.map(html).join('</li><li>')+'</li></ul></div>');
+                '<b>Condition: '+html(requested)+'</b> (2024 SRD 5.2.1 quick reference)<ul><li>'+
+                data.map(html).join('</li><li>')+'</li></ul><small>Condition summary for play; specific effects determine duration and removal.</small></div>');
         }
     }
     on('ready', function () {
