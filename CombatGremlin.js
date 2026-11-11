@@ -1253,6 +1253,26 @@ var CombatGremlin = CombatGremlin || (function () {
                  weapon: weapon ? weapon[1].trim() : 'Attack' };
     }
 
+    // Damage types are not encoded in the effect-* roll IDs. On the Roll20 2024
+    // sheet, a 'Custom' chip may be a feature that inherits weapon damage or
+    // one that deals its own damage type. Do NOT globally treat Custom as physical.
+    // Only labels with a verified single damage type are mapped here; the player
+    // and GM remain responsible for applying each effect legally.
+    function custom2024DamageType(label, weaponType) {
+        var name = String(label || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        // Remove Roll20's rolled formula, e.g. Sneak Attack (5d6) or Rage (+2),
+        // but keep named parentheses such as The Court's Favor (Divine Favor).
+        name = name.replace(/\s*\((?:[+-]?\d+|\d+d\d+(?:\s*[+-]\s*\d+)?)\)\s*$/, '').trim();
+        if (/^(?:rage|great weapon master|heavy weapon mastery|sneak attack|fury of the small|magic weapon)$/.test(name)) {
+            return weaponType || null;
+        }
+        if (/^dreadful strikes?$/.test(name)) return 'psychic';
+        if (/^hunter['’]s mark$/.test(name)) return 'force'; // 2024 spell rules
+        if (name === 'hex') return 'necrotic';
+        if (name === 'divine favor' || /\(divine favor\)$/.test(name)) return 'radiant';
+        return null; // Unknown or choice-based type: GM resolves manually.
+    }
+
     function parse2024Damage(msg) {
         var html = String(msg.content || '');
         if (html.indexOf('dnd-2024--roll') < 0 || !/data-rollSubcategory=["']Damage["']/.test(html)) return null;
@@ -1266,24 +1286,65 @@ var CombatGremlin = CombatGremlin || (function () {
             if (amount === null || !Number.isInteger(amount) || amount < 0) return null;
             rollTotal += amount;
         }
-        // Each 2024 damage chip supplies an explicit type and an integer value.
-        // Do not count the separately displayed Total as another component.
-        var components = [], rx = /<div class=["']header__damage-breakdown["']>[\s\S]*?<div class=["']damage-breakdown__icon["'][^>]*>[\s\S]*?<\/div>\s*([A-Za-z][A-Za-z ]{0,35})\s*<div class=["']damage-breakdown__total["']>\s*([+-]?\d+)\s*<\/div>/g;
+        // The first set of 2024 damage chips lists damage types and integer
+        // values. Effect chips can say 'Custom': that is NOT a damage type.
+        var chips = [], rx = /<div class=["']header__damage-breakdown["']>[\s\S]*?<div class=["']damage-breakdown__icon["'][^>]*>[\s\S]*?<\/div>\s*([A-Za-z][A-Za-z ]{0,35})\s*<div class=["']damage-breakdown__total["']>\s*([+-]?\d+)\s*<\/div>/g;
         var m;
         while ((m = rx.exec(html)) !== null) {
-            var type = canonicalType(m[1]);
+            var rawType = String(m[1]).trim().toLowerCase();
+            var type = canonicalType(rawType);
             var n = Number(m[2]);
-            if (!type || !Number.isInteger(n) || n < 0) return null;
-            components.push({ type: type, value: n });
+            if ((!type && rawType !== 'custom') || !Number.isInteger(n) || n < 0) return null;
+            chips.push({ type: type, value: n, custom: rawType === 'custom' });
         }
-        if (!components.length || components.length > 12 || components.length !== names.length) return null;
+        if (!chips.length || chips.length > 12 || chips.length !== names.length) return null;
         var totalValue = html.match(/class=["']total__value["']>\s*([+-]?\d+)\s*<\/span>/);
         if (!totalValue) return null;
         var displayedTotal = Number(totalValue[1]);
-        var partsTotal = components.reduce(function(sum, part) { return sum + part.value; }, 0);
+        var partsTotal = chips.reduce(function(sum, part) { return sum + part.value; }, 0);
         if (partsTotal !== displayedTotal || partsTotal !== rollTotal) return null;
-        return { value: partsTotal, components: components,
-            breakdown: components.map(function(part) { return part.value + ' ' + part.type; }).join(' + ') };
+
+        var hasCustom = chips.some(function(part) { return part.custom; });
+        if (!hasCustom) {
+            // Preserve the established, successful parsing path for existing
+            // typed 2024 rolls, including mixed-type saving-throw spells.
+            return { value: partsTotal, components: chips.map(function(part) {return {type:part.type,value:part.value};}),
+                breakdown: chips.map(function(part) { return part.value + ' ' + part.type; }).join(' + ') };
+        }
+
+        // For Custom components, cross-check the rendered roll formula rows with
+        // individual signed Roll20 roll IDs. Never pair by amount alone: two
+        // effects may happen to roll the same number.
+        var formulas = [], seenIds = {}, re = /<div class=["']rt-formula["']>\s*<div class=["']rt-formula__raw["']>\s*([^<]*?)\s*<\/div>\s*<div class=["']rt-formula__evaluated["']>\s*<span class=["']rt-formula__evaluated-string["']([^>]*)>\s*([+-]?\d+)\s*<\/span>\s*<\/div>\s*<\/div>/g;
+        while ((m = re.exec(html)) !== null) {
+            var attrs = m[2];
+            var nameAttr = attrs.match(/\bdata-rollname=["']([^"']+)["']/);
+            var idAttr = attrs.match(/\bdata-rollid=["']([^"']+)["']/);
+            var rollName = nameAttr && nameAttr[1];
+            if (!rollName || !idAttr || rollName !== idAttr[1] || seenIds[rollName] ||
+                !Object.prototype.hasOwnProperty.call(msg.rolls, rollName)) return null;
+            var actual = numeric(msg.rolls[rollName].results && msg.rolls[rollName].results.total);
+            var shown = Number(m[3]);
+            if (!Number.isInteger(shown) || shown < 0 || shown !== actual) return null;
+            seenIds[rollName] = true;
+            formulas.push({ name: String(m[1]).trim(), id: rollName, value: shown });
+        }
+        if (formulas.length !== chips.length || Object.keys(seenIds).length !== names.length) return null;
+        // The FIRST component must be the base weapon roll, with a real damage
+        // type, before any inherited weapon-type effect can be resolved.
+        var weaponType = !chips[0].custom && formulas[0].id.indexOf('effect-') !== 0 ? chips[0].type : null;
+        var components = [], breakdown = [];
+        for (var j = 0; j < chips.length; j++) {
+            if (chips[j].value !== formulas[j].value) return null;
+            // 'Custom' is permitted only for explicit named effect rolls.
+            if (chips[j].custom && formulas[j].id.indexOf('effect-') !== 0) return null;
+            var resolvedType = chips[j].custom ? custom2024DamageType(formulas[j].name, weaponType) : chips[j].type;
+            if (!resolvedType) return null;
+            components.push({type:resolvedType,value:chips[j].value});
+            breakdown.push(chips[j].value + ' ' + resolvedType +
+                (chips[j].custom ? ' [' + formulas[j].name + ']' : ''));
+        }
+        return { value:partsTotal, components:components, breakdown:breakdown.join(' + ') };
     }
 
     function handle2024(msg) {
